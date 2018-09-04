@@ -1,0 +1,834 @@
+Prosper Loan Data Exploration by Samuel McAuliffe
+========================================================
+<br>
+
+Prosper is an American based peer-to-peer lending platform. The platform is
+used to match borrow with investor.When a borrower completes an application for 
+funds, their request is reviewed by investors(both institutional and individual)
+who are then able to fund up to $35,000 per loan request. Prosper handles the 
+servicing of the loan and is responsible for the collection and distribution of 
+borrower payments to loan investors. The data encompasses a time frame from
+between 2006 and 2013. It should be interesting to see how the GFC affected the
+demand for loans around 2007/2008.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk. This
+# prevents the code from displaying in the knitted HTML output. You should set
+# echo=FALSE for all code chunks in your file, unless it makes sense for your
+# report to show the code that generated a particular plot.
+
+# The other parameters for "message" and "warning" should also be set to FALSE
+# for other code chunks once you have verified that each plot comes out as you
+# want it to. This will clean up the flow of your report.
+
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(gridExtra)
+library(tidyr)
+library(lubridate)
+
+# Load the Data
+loandf <- read.csv('prosperLoanData.csv')
+```
+
+## Examining the structure of the dataset
+<br>
+
+The dataset is quite robust, containing 113,937 rows and 81 variables. This is
+a considerable amount of variables and inlcudes detailed information about the 
+investor, the borrower as well as the loan itself. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, structure}
+str(loandf)
+```
+
+As the dataset has so many variables, for the purpose of this report we shall
+focus only on a few select ones which will first be explored using univariate
+and summary analysis and then analysed in more detail in the bivariate and
+multivariate analysis sections.
+
+Before we explore these variables, I will clean a few of the variables.
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Convert_dates}
+# Convert loan origination from factor to character
+mid <- as.character(loandf$LoanOriginationDate)
+
+#Using lubidate package to replace the original variable with date formatted
+loandf$LoanOriginationDate <- ymd_hms(mid)
+```
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Convert_quarter}
+loandf$LoanOriginationQuarter <- as.character(loandf$LoanOriginationQuarter)
+loandf <- loandf %>%
+         separate (col = LoanOriginationQuarter,
+                   into = c("Quarters", "Year"), sep = " ") %>%
+         unite(col = LoanOriginationQuarter, Year, Quarters, sep = " ")
+
+loandf$LoanOriginationQuarterF <- factor(loandf$LoanOriginationQuarter)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Convert_credit}
+
+loandf$AverageCreditScore <- (loandf$CreditScoreRangeLower + 
+  loandf$CreditScoreRangeUpper) / 2
+
+```
+
+## Converting listing cateogry from numeric to factor.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Convert_listing_category}
+# Using the excel spreadsheet, convert listing categories to factors.
+uses <- c("Not Available", "Debt Consolidation", "Home Improvement", "Business", 
+          "Personal Loan", "Student Use", "Auto", "Other", "Baby & Adoption", 
+          "Boat", "Cosmetic Procedure", "Engagement Ring", "Green Loans", 
+          "Household Expenses", "Large Purchases", "Medical/Dental", 
+          "Motorcycle", "RV", "Taxes", "Vacation", "Wedding Loan")
+
+loandf$Categories <- factor(loandf$ListingCategory..numeric., 
+                                levels = c(0:20), labels = uses)
+```
+
+# Univariate Plots Section
+<br>
+
+To get started, we will preform univariate analysis on a number of
+the variables to get a feel for the dataset and basic distributions of the
+key variables. A short descripton is also provided after each visual. 
+
+## Distribution of Loan Amounts
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Amount_Summary}
+summary(loandf$LoanOriginalAmount)
+```
+
+Minimum loan value appears to be $1,000 and the Max is $35,000. The median
+loan amount is $6,500. It appears that only 25% of the loans are above $12,000.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Loan_Amount_Histogram}
+ggplot(aes(x = LoanOriginalAmount), data = loandf) +
+  geom_histogram(binwidth = 500, color = 'black', fill = '#57d3ef') +
+  scale_x_continuous(limits = c(0, 35000), breaks = seq(0, 35000, 2500))
+```
+
+The histogram for loan amounts appears to be a right skewed distribution. There
+are however large spikes at prices that are factors of 5 and 10 thousand. The
+most noticeable of these spikes are at the 10,000 and 15,000 loan amounts. These
+spikes are likely attributed to people simply "rounding up" their required
+amount to the nearest $5000. Additionally it could be because there are some
+default amounts listed (every $5k) and people just click these rather than enter
+their own number. 
+Most of the loans are below 15,000 and interestingly our mode appears to be 
+$4000. This seems odd given that we have spikes at loan amounts that are
+factors of 5 and 10. 
+
+During the sub-prime crisis and resulting GFC, many people used credit to help
+fuel their investment/improvement of real estate holdings in the hopes of
+flipping it for profit to the next person. As this dataset encompasses the years
+of the GFC, I was curious if people who owned a home had different borrowing
+patterns than those who didn't.
+
+## Loan Amount Distributions for Home Owners and Non-Home Owners
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Home_summary}
+summary(loandf$IsBorrowerHomeowner)
+```
+
+The distribution of home owners to non-home owners is surprisingly fairly even
+with 56,459 non-home owners to 57,478 home-owners. 
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Amount_vs_home}
+ggplot(aes(x = LoanOriginalAmount), data = loandf) +
+  geom_histogram(binwidth = 2000, color = 'black', fill = '#57d3ef') +
+  scale_x_continuous(limits = c(0, 35000), breaks = seq(0, 35000, 4000)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  facet_wrap(~IsBorrowerHomeowner)
+```
+
+The above visual shows the two histograms for those are not home owners and
+those that are. It would appear that non-home owners actually had higher counts
+in the lower loan amount values (lower than 8k), whereas home-owners had higher 
+counts of the higher loans values (8k and above).
+
+## Loan categories
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Category_summary}
+summary(loandf$Categories)
+```
+
+There are 21 different categories of reasons for borrowing. The largest of them
+is unfortunately "Not Available" and we will exclude this from the plot. The
+next largest is debt consolidation with 58,308 loans followed by "Other" at
+10,494. 
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE,  Counts_of_loan_categories}
+# removing the category "Not Available"
+ggplot(aes(x = Categories), data = subset(loandf, 
+          Categories != "Not Available")) +
+  geom_histogram(stat = "count", color = 'black', fill = '#57d3ef') +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Unsurprisingly debt consolidation ranked close to 6 times that of the next
+highest specific category (home improvement). It was assumed that home 
+improvement would also rank high on these loans given the housing bubble that 
+was arising in the U.S. at the time. The nondescript "other" category was
+actually the second highest overall. 
+
+## Borrower Occupations
+<br>
+
+We should also take a quick look at the occupations of borrowers. 
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Occupations}
+ggplot(aes(x = Occupation), data = loandf) +
+  geom_histogram(stat = "count", color = 'black', fill = '#57d3ef') +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+The above visual is a little less revealing than I had hoped it be. There is
+two obvious spikes, being "Other" and "Professional". They are both very
+nondescript and eludes to the possibility that many borrowers are hesitant on
+adding their actual profession to their loan request. Instead we shall take a 
+look at their employment status.
+
+## Employment Status
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Employment_summary}
+summary(loandf$EmploymentStatus)
+```
+
+There are 8 categories of employment. The highest being simply "Employed"
+at 67,322. It is unfortunate these individuals aren't categorised into what
+form of "Employed" they are. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Employment}
+#removed blank employment status category.
+ggplot(aes(x = EmploymentStatus), data = subset(loandf, 
+          EmploymentStatus != "")) +
+  geom_histogram(stat = "count", color = 'black', fill = '#57d3ef') +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Employment status tells us some information, however it is still a little
+underwhelming. "Employed" has the highest spike, yet it doesn't tell us if these
+people are full time, part time, casual or self employed. One has to wonder
+whether these sub-par financial assessments are linked to delinquincy. We will
+examine this later. Other than the nondescript "Employed" spike, the next
+largest group appears to be full time employment, followed by self employed.
+
+As we have been unable to gather any strong signal using the employment status
+and occupation variables, we can try examining borrower income levels. 
+
+## Income Range
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Income_summary}
+summary(loandf$IncomeRange)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Income}
+ggplot(aes(x = IncomeRange), data = loandf) +
+  geom_histogram(stat = "count", color = 'black', fill = '#57d3ef') +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_x_discrete(limits = c("Not employed", "$0", "$1-24,999", 
+                              "$25,000-49,999", "$50,000-74,999", 
+                              "$75,000-99,999", "$100,000+"))
+```
+
+I adjusted the above graph to remove the "not displayed" entries and then placed
+the x-axis in logical order. It appears that the counts for middle income
+earners are the highest. Interestingly those in the upper income brackets have
+a higher count than those in the lower. 
+
+## Debt to income Ratio
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, DIR_summary}
+summary(loandf$DebtToIncomeRatio)
+```
+
+The debt to income ratio ranges from 0 to an enormous 10. The median is 0.22
+with the 75% of borrowers falling under 0.32. We will generate a histogram with
+an x limit of 1.0 as this represents debt = income situation. The maximum of
+10 would represent a party that is either heavily in debt or leveraged to the
+hilt on an investment. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, DIR}
+ggplot(aes(x = DebtToIncomeRatio), data = loandf) +
+  geom_bar(stat = "count", binwidth = 0.05, color = 'black', fill = '#57d3ef') +
+  scale_x_continuous(limits = c(0, 1.0), breaks = seq(0, 1.0, 0.1))
+```
+
+The debt to income ratio histogram is actually quite a nice visual. I limited 
+the x-axis to a D:I ratio of 1.0 (debt=income), however there are instances of
+borrowers which are beyond this point. The bulk of borrowers have a D:I between
+0.05 and 0.4.). A D:I of 0.4 is around the maximum for borrowers seeking a 
+a more stable qualified mortgage and both the median and mean fall below this.
+
+## Current Credit Lines
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, CCL_summary}
+summary(loandf$CurrentCreditLines)
+```
+
+The average is about 10, however the max is quite a large 59. 75% of borrowers
+have less than 13 current lines of credit. 
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, CCL}
+ggplot(aes(x = CurrentCreditLines), data = loandf) +
+  geom_histogram(stat = "count", binwidth = 5, color = 'black', 
+                 fill = '#57d3ef') +
+  scale_x_continuous(limits = c(0, 40), breaks = seq(0, 40, 5))
+```
+
+The histogram of current credit lines is skewed right and centered around 7.5.
+
+## Employment Status Duration
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, EmploymentDuration_summary}
+summary(loandf$EmploymentStatusDuration/12)
+```
+
+The duration of employment variable is in months so I have divided it by 12 to
+convert it to years. We find that the median is about 5.5 with most of the
+borrowers having been employed for less than 11.5 years. This would make sense
+given that an online p2p loan platform would appeal to younger generations
+over older ones. The max is 62.9 years which is quite an outlier. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Employment12}
+#Employment status duration converted from months to years
+ggplot(aes(x = EmploymentStatusDuration/12), data = loandf) +
+  geom_line(stat = "count", binwidth = 1, color = 'black') +
+  scale_x_continuous(limits = c(0, 60), breaks = seq(0, 60, 5))
+```
+
+As expected employment status duration is skewed right. From the line and 
+the summary above we can gather that 50% of borrowers had been employed for less 
+than 6 years. The average time was 8 years and the max was a surprising 63.
+Another interesting thing is that our first quartile is sitting at 2.2, so 25%
+of people have less than 2.2 years employment. I do wonder if this is simply
+because of age or possibly because of the inability to find employment.
+
+## Credit Scores
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, PR_summary}
+summary(loandf$ProsperRating..numeric.)
+```
+
+Our average and median are about 4 which corresponds to a C rating. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, PR}
+ggplot(aes(x = ProsperRating..numeric.), data = loandf) +
+  geom_bar(color = 'black', fill = '#57d3ef') + 
+  scale_x_discrete(name = "Prosper Ratings", limits = c(1, 2, 3, 4, 5, 6, 7),
+                   labels = c("1" = "HR", "2" = "E", "3" = "D", "4" = "C", 
+                              "5" = "B", "6" = "A", "7" = "AA"))
+```
+
+The above visual shows the counts of the different loan ratings from high
+risk (HR) to safe AA grade. The plot has a fairly normal distribution and the
+mean and median are about a C rating. It would be interesting to see the
+distribution of these ratings over time.
+
+## Average Credit Rating
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, CS_summary}
+summary(loandf$AverageCreditScore)
+```
+
+The average credit score is around 690. This is actually better than I had
+imagined it would be. The minimum is an abysmal 9.5 and the max is 890. It is
+a little concerning that 75% of borrowers are below 730, barely scraping in
+to the satisfactory zone. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, CS}
+ggplot(aes(x = AverageCreditScore), data = loandf) +
+  geom_histogram(color = 'black', fill = '#57d3ef', binwidth = 20) +
+  scale_x_continuous(limits = c(400, 900), breaks = seq(400, 900, 50))
+```
+
+Average credit score has a relatively normal distribution centered around 650-700. 
+
+## Borrower APR
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, APR_summary}
+summary(loandf$BorrowerAPR)
+```
+
+Median and mean are around the 20 - 22% mark. The lowest is 0.6% and the highest
+is 51.2%. The third quartile is around the 28% mark.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, APR}
+ggplot(aes(x = BorrowerAPR), data = loandf) +
+  geom_histogram(color = 'black', fill = '#57d3ef', binwidth = 0.02)
+```
+
+Relatively normal distribution of APR centered around the 0.20 mark.There is a
+a spike at the 0.36 mark. I'm not quite sure what that could be. 
+
+## Credit Score Bins
+<br>
+
+We will create a new variable that will hold binned valued for a borrowers
+average credit score. These bins are associated average credit scores are as
+follows - 
+
+Very Unsatisfactory (<560)
+Unsatisfactory (560 - 719)
+Satisfactory (720 - 879)
+Good (880 - 959)
+Excellent (960 - 1000)
+```{r echo=FALSE, message=FALSE, warning=FALSE, Scorebins}
+#Binning credit scores into factors
+loandf <- loandf %>%
+  mutate(CreditBins = ifelse(AverageCreditScore < 560, "Very Unsatisfactory",
+                      ifelse(AverageCreditScore < 720, "Unsatisfactory",
+                      ifelse(AverageCreditScore < 880, "Satisfactory",
+                      ifelse(AverageCreditScore < 960, "Good",
+                      ifelse(AverageCreditScore < 1000, "Excellent",
+                             "Not Available"))))))
+loandf$CreditBins <- factor(loandf$CreditBins) 
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Credbin_summary}
+summary(loandf$CreditBins)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Creditbin_uni}
+ggplot(aes(x = CreditBins), data = loandf) +
+  geom_bar(color = 'black', fill = '#57d3ef')
+```
+
+As we can see the Unsatisfactory group has the highest count with over 70k. The
+next highest is Satisfactory at 38k. There is only 27 borrowers with a credit
+rating over 880. This is actually not surprising as those with sub-par credit
+ratings would be drawn to this sort of p2p loan facility. 
+
+# Univariate Analysis Summary
+<br>
+
+### What is the structure of your dataset?
+
+
+Using Univariate analysis we were able to get a feel for the dataset. It is
+rather robust at 81 variables. One major issue is that some of the variables
+have generalised answers where borrowers have declined to provide information,
+or have given a nondescript answer.
+
+### What is/are the main feature(s) of interest in your dataset?
+
+
+Examining this dataset completely would be far beyond the scope of this project.
+Instead I will focus on some of the above variables and their relationship with
+each other. I would like to see if there were changes to lending and delinquency
+patterns just prior to the GFC. 
+
+### What other features in the dataset do you think will help support your \
+investigation into your feature(s) of interest?
+
+Described above.
+
+### Did you create any new variables from existing variables in the dataset?
+
+
+Not yet, just modified some.
+
+### Of the features you investigated, were there any unusual distributions? \
+Did you perform any operations on the data to tidy, adjust, or change the form \
+of the data? If so, why did you do this?
+
+Described above.
+
+
+#Bivariate Plots
+<br>
+
+We will now look at our variables in a little more detail and begin to
+analyse the relationships between them. As this dataset is all about loans,
+we will start by taking a look at loan amounts over time.
+
+##Loan Size Distribution Over Time. 
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Price_time}
+ggplot(aes(x = LoanOriginationDate, y = LoanOriginalAmount), data = loandf) +
+  geom_point(alpha = 0.05, position = position_jitter(h = 0), color = 'black') +
+    geom_line(stat = 'summary', fun.y = mean, color = "red")
+```
+
+While the above visual is heavily overplotted a few major things stand out. 
+
+It appears that between late 2008 and mid 2009 very few new loans seem to be 
+created. After some research online I found that the reason for this is that in 
+October 2008 Propser decided to stop all new lending on it's site because of 
+scrutiny by the SEC. Prosper then announced in late April 2009 that it reopen 
+it's lending platform in california (seen as the faint spike in loans at the 
+center of the gap in the above visual). Finally in July it began brokering in 
+46 states again which is where the gap in the visual above ends.
+
+Another thing that stands out is the emphasised horizontal price lines at 
+the $5k intervals. It is likely that people simply rounded up to the nearest
+$5k when selecting their desired loan amount.
+
+The mean line in red also shows a rise during the peak of the sub-prime mortgage
+crisis. Is it possible that some of the loans through Prosper were also
+sub-prime?
+
+One final observation is that at about the end of the first quarter of 2013 it
+appears that Prosper may have increased their maximum loan limit as we see
+the emergence of loans that exceed $25k.
+
+##Loan amounts for each loan category. 
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Category_amount}
+ggplot(aes(x = Categories, y = LoanOriginalAmount), 
+       data = subset(loandf, Categories != "Not Available")) +
+  geom_boxplot(lwd = 0.40, outlier.color = I("#C70039"), outlier.shape = 3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  coord_cartesian(ylim = c(0, 40000))
+```
+
+We can see that debt consolidation and baby/adoption categories have the largest
+loan amounts. This result for debt consolidation was expected, however the
+baby/adoption category having loans this large was a surprise. Other categories
+that have high loan amounts include business, green loans and wedding loans. 
+
+## Delinquencies per Quarter
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, DelQuart}
+ggplot(aes(x = LoanOriginationQuarter, y = CurrentDelinquencies), 
+       data = loandf) +
+  geom_bar(stat = "identity", fill = "#57d3ef") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+The above bar graph is quite interesting. We see a big spike in current
+delinquencies in the second half of 2006 and first half of 2007. The GFC is
+commonly believed to have begun in July 2007. It was set off by a speculative
+credit fueled housing bubble. Could this spike be an indicator that some
+families were running out of money and were unable to service their loans?
+
+## Average Quarterly Credit Score
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, ScoreQuart}
+ggplot(aes(x = LoanOriginationQuarter, y = AverageCreditScore), 
+       data = loandf) +
+  geom_boxplot(lwd = 0.45, outlier.color = I("#C70039"), outlier.shape = 3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  coord_cartesian(ylim = c(350, 950))
+```
+
+The above plot shows that pre GFC there were quite a number of borrowers with
+poor credit scores. Anything below about 650 can be considered a less than ideal
+credit score. In fact the median for these years appears to be less than the
+standard "good score" of 700. It appears that when the company re-opened to all
+states in 2009, they also implemented some new rules for minimum credit scores.
+It can be see that beginning in Q3 2009, the median is a little over 700 and the
+lower extreme does not dip below 600. Could this possibly show that credit
+providers did make some changes following the GFC?
+
+## Credit lines by Income Range
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, CCLIncome}
+ggplot(aes(x = IncomeRange, y = CurrentCreditLines), data = loandf) +
+  geom_boxplot(lwd = 0.50, outlier.color = I("#C70039"), outlier.shape = 3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_x_discrete(limits = c("Not employed", "$0", "$1-24,999", 
+                              "$25,000-49,999", "$50,000-74,999", 
+                              "$75,000-99,999", "$100,000+"))
+
+
+```
+
+Median current credit lines appears to increase as income rises. This trend does
+not hold for those with an income of 0. The IQR for those with $0 income is
+the largest of all the groups.
+
+## Employment Length and Loan Status
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, EmployCredit}
+ggplot() + geom_histogram(data=loandf, aes(x=EmploymentStatusDuration/12, 
+                                        fill=CreditBins),binwidth=1) +
+    scale_fill_manual(values = c("#1976D2","#388E3C", "#F57C00", "#D32F2F"))
+
+```
+
+We can see that the portion of borrowers with very unsatisfactory credit scores
+are fairly concentrated in the lower employment duration area. Most are under 5
+years employment duration. Could this be because many of these individuals are
+jumping between part-time jobs and are sometimes unable to service their credit,
+leading to the bad credit scores?
+
+Unsatisfactory level retains a higher count than satisfactory for most of the 
+graph and this is to be expected given this service would likely attract those 
+who are unable to get a suitable interest rate when applying for a loan at a 
+financial institution such as a bank. 
+
+## Borrower APR to Credit Rating
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, CreditBorrow}
+ggplot(aes(x = CreditBins, y = BorrowerRate * 100),
+      data = subset(loandf, !is.na(BorrowerRate))) +
+  geom_boxplot(lwd = 0.50, outlier.color = I("#C70039"), outlier.shape = 3)
+```
+
+As we can see in the above visual, the borrower rate is somewhat negatively 
+correlated with credit score. The median for "good" credit scores is less than 
+10% and the median for "very unsatisfactory" appears to be a little over 26%. 
+The NA values have a median of about 15, placing them in the risk area somewhere
+between satisfactory and unsatisfactory. 
+
+# Bivariate Analysis
+<br>
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. How did the feature(s) of interest vary with other features in \
+the dataset?
+
+Described above.
+
+### Did you observe any interesting relationships between the other features \
+(not the main feature(s) of interest)?
+
+Described above.
+
+### What was the strongest relationship you found?
+
+Strongest relationship would be the borrower rate and the credit score (bins)
+
+# Multivariate Plots Section
+<br>
+
+## Quarterly Delinquencies by Income Range
+<br>
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, QuartDelIncome}
+ggplot(aes(x = LoanOriginationQuarter, y = CurrentDelinquencies, 
+           fill = IncomeRange), data = loandf) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  scale_fill_manual(values = c("#D81B60","#FBC02D", "#388E3C", "#F57C00", 
+                               "#7b1FA2", "#D32F2F", "#1976D2", "#212121"))
+```
+
+The above graph shows the distribution of current delinquencies for each income
+range across time. I had hoped it would reveal some information regarding
+the income range of delinquent borrowers in the lead up to the GFC, however it
+appears that the "Income range" application question was only introduced
+in the first few months of 2007. We can still see that most of the current
+delinquencies are from those in the 25 - 50k income range. Instead we might try
+using bin values for credit rating. 
+
+## Quarterly Delinquencies by Credit Bin
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, QuartDelCredit}
+ggplot(aes(x = LoanOriginationQuarter, y = CurrentDelinquencies, 
+           fill = CreditBins), data = loandf) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  scale_fill_manual(values = c("#1976D2","#388E3C", "#F57C00", "#D32F2F"))
+```
+
+From the visual we can see that no borrowers with a "good" credit rating
+have any delinquencies and this is expected. Those with satisfactory make up
+a small portion of delinquencies. There were a large number of borrowers with
+very unsatisfactory credit ratings and current delinquencies in the lead up to
+the GFC. Credit ratings in the very unsatisfactory bin appear to disappear from
+2009 and this actually lowers the current delinquencies count significantly.
+
+## Delinquencies by Employment Status and Credit Score
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, EmployDelCredit}
+ggplot() + geom_bar(stat="identity", data = subset(loandf, 
+                EmploymentStatus != ""), 
+           aes(x=EmploymentStatus, y = CurrentDelinquencies, fill=CreditBins)) +
+  scale_fill_manual(values = c("#1976D2","#388E3C", "#F57C00", "#D32F2F")) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+The above bar graph is simple but it does elude to a number of things. The first
+observation is that most groups contain some proportion of very unsatisfactory
+credit score borrowers (with the exception of "Employed"). The "Employed"
+category appears to have a higher proportion of borrowers with higher credit
+scores than the rest of the groups. The highest proportion of "Very
+Unsatisfactory credit score borrowers have come from the "Not Available"
+employment status group. This seems somewhat suspicious, as if those with bad
+credit scores are refraining from writing their employment status or lack there
+of.
+
+## Credit Binned Quarterly Delinquencies by Employment Status
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, EmployCredDelQuart}
+ggplot() + geom_bar(stat="identity", data = subset(loandf, 
+              loandf$EmploymentStatus != "" & !is.na(CreditBins)), 
+           aes(x=LoanOriginationQuarter, y = CurrentDelinquencies, 
+              fill=EmploymentStatus)) +
+           theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  facet_wrap(~CreditBins, ncol = 2)
+```
+
+Described in final plot section
+
+## Borrower APR vs Credit Score by Prosper Rating
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, nonnull}
+#creating a subset that removes NA values from variables to be used
+filled <- subset(loandf, !is.na(DebtToIncomeRatio) & !is.na(BorrowerAPR) & 
+                   !is.na(ProsperRating..numeric.))
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, CredRateAPR}
+ggplot(aes(x = BorrowerAPR, y = as.integer(AverageCreditScore),
+           color = factor(ProsperRating..numeric.), 
+           group = factor(ProsperRating..numeric.)), 
+           data = filled) +
+  geom_jitter() +
+    scale_color_manual(values = c("#FA4659", "#FC7055", "#FC9450", "#FAB448", 
+                                  "#C0B743", "#7DB73F", "#00B33C")) +
+  theme(legend.key.size = unit(0.9, "cm")) +
+  theme_dark()
+```
+
+
+The above chart is quite detailed and there is a bit to digest. It shows the
+relationship between average credit score and borrower APR for each of the
+7 prosper ratings. Further discussion on this will be in the next section.
+
+# Multivariate Analysis
+
+### Were there any interesting or surprising interactions between features?
+
+Yes, they will be described in the next section
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the \
+strengths and limitations of your model.
+
+Given my current time constraints I did not create any models with the dataset.
+However I fully intend to at a later date. 
+
+------
+
+# Final Polished Plots and Summary
+
+### Plot One
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Plot_One}
+ggplot(aes(x = IncomeRange, y = CurrentCreditLines), data = loandf) +
+  geom_boxplot(lwd = 0.50, outlier.color = I("#C70039"), outlier.shape = 3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("Income Range and Credit Lines") +
+  xlab("Income Range ($)") +
+  ylab("Current Credit Lines") +
+  scale_x_discrete(limits = c("Not employed", "$0", "$1-24,999", 
+                              "$25,000-49,999", "$50,000-74,999", 
+                              "$75,000-99,999", "$100,000+"))
+```
+
+### Description One
+
+The above is a simple box plot shows a positive correlation between income and 
+current credit lines. As we can see the median and positioning of the box 
+increases as income does. The trend does not hold for those with $0 income. The
+IQR also becomes larger with each income range jump. 
+
+### Plot Two
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Plot_Two}
+ggplot() + geom_bar(stat="identity", data = subset(loandf, 
+              loandf$EmploymentStatus != "" & !is.na(CreditBins)), 
+           aes(x=LoanOriginationQuarter, y = CurrentDelinquencies, 
+              fill=EmploymentStatus)) +
+           theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+      ggtitle("Credit Binned Quarterly Delinquencies by Employment Status") +
+      xlab("Loan Origination Quarter") +
+      ylab("Current Delinquencies") +
+  facet_wrap(~CreditBins, ncol = 2)
+```
+
+### Description Two
+This is actually quite a nice graph, albeit a little squashed when not in it's
+own window. We can see that there are actually no delinquencies recorded for
+those with a good credit score. The next level up "satisfactory" has limited
+delinquenciy counts. When we get to the unsatisfactory level, we can see that
+delinquency counts shoot up by quite a considerable amount. The very
+unsatisfactory level had by far the highest counts pre GFC and after prosper
+re-opened after it's hiatus, it appears that those with a credit score that low
+have been unable to borrow on the platform. One interesting trend is the growing
+delinquency counts among the individuals who have listed their employment status
+as simply "Employed" which can have a very broad range of capacities. We can
+also see that in each of the credit bins, there appears to be a spike in
+delinquencies for those that are self-employed. Could these be the self employed
+property investors/flippers of the sub prime crisis?
+
+### Plot Three
+```{r  echo=FALSE, message=FALSE, warning=FALSE, Plot_Three}
+ggplot(aes(x = BorrowerAPR*100, y = as.integer(AverageCreditScore),
+           color = factor(ProsperRating..numeric.), 
+           group = factor(ProsperRating..numeric.)), 
+           data = filled) +
+  geom_jitter() +
+  scale_color_manual(values = c("#FA4659", "#FC7055", "#FC9450", "#FAB448", 
+                    "#C0B743", "#7DB73F", "#00B33C"), 
+                    name = "Rating") +
+  stat_smooth(method = 'lm', size = 1.3)+
+  ggtitle("Borrower APR vs Credit Score by Prosper Rating") +
+  xlab("BorrowerAPR (%)") +
+  ylab("Average Credit Score") +
+  theme(legend.key.size = unit(0.9, "cm")) +
+  theme_dark()
+```
+
+### Description Three
+
+There is quite a bit to digest in this scatter plot. The first observation is
+that as credit score decreases, borrower APR increases (negative correlation).
+The second observation is that the ratings prosper applies to their loans appear
+to be fairly linked to the credit score and APR. We can see an almost rigid
+colored stepping pattern as we move to lower credit scores and higher APR. I
+have also added some lm lines so that we can see the trend lines for each of the
+ratings. 
+
+# Reflection
+
+I am relatively new to R and as such this was a steep learning curve which I
+hope to improve on as I learn more. The dataset was somewhat challenging, not
+because of the length but because of the large amount of variables. I first had
+to spend some time looking at the excel variable file and deciding what I would
+examine before I even touched this report. A number of my charts were a little
+disappointing as there was a lot of non-specific data. Examples of this include
+the "Employed" category for employment and the lack of income range data
+pre-GFC. 
+
+Given the time constraints I had with balancing work with this project, I was
+unable to construct any models. Future work would include analysing the
+investing side of the data rather than just the debtor side. I would also like
+to construct a model to predict defaults. 
+
+# References
+
+https://stackoverflow.com/questions/17496358/r-help-converting-factor-to-date
+
+https://www.rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf
