@@ -9,7 +9,7 @@ This EDA contains 3 segments in increasing order of complexity: Univariate Plots
 
 ## Info
 
-*project.html* - Knitted html copy of EDA.
-*project.Rmd* - Primary EDA project R file. 
-*Prosper Loan Data - Variable Definitions.xlsx* - Prosper loan data feature definitions.
-*prosperLoanData.csv* - Prosper loans data file.
+- *project.html* - Knitted html copy of EDA.
+- *project.Rmd* - Primary EDA project R file. 
+- *Prosper Loan Data - Variable Definitions.xlsx* - Prosper loan data feature definitions.
+- *prosperLoanData.csv* - Prosper loans data file.
